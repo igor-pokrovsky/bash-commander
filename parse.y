@@ -2837,11 +2837,16 @@ time_command_acceptable ()
     case AND_AND:
     case OR_OR:
     case '&':
+    case WHILE:
     case DO:
+    case UNTIL:
+    case IF:
     case THEN:
+    case ELIF:
     case ELSE:
     case '{':		/* } */
-    case '(':		/* ) */
+    case '(':		/* )( */
+    case ')':		/* only valid in case statement */
     case BANG:		/* ! time pipeline */
     case TIME:		/* time time pipeline */
     case TIMEOPT:	/* time -p time pipeline */
@@ -3722,6 +3727,8 @@ eof_error:
 /*itrace("parse_comsub:%d: lex_inword -> 1 ch = `%c' (%d)", line_number, ch, __LINE__);*/
 	      tflags |= LEX_INWORD;
 	      lex_wlen = 0;
+	      if (tflags & LEX_RESWDOK)
+		lex_rwlen = 0;
 	    }
 	}
 
