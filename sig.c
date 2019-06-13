@@ -59,7 +59,7 @@
 #  include "commander.h"
 #endif
 
-extern int last_command_exit_value;
+extern volatile int last_command_exit_value;
 extern int last_command_exit_signal;
 extern int return_catch_flag;
 extern int loop_level, continuing, breaking, funcnest;

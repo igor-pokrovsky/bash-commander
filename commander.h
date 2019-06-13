@@ -68,12 +68,12 @@ extern void cmdr_activate __P((int active));
 void cmdr_reset_terminal __P((void));
 void cmdr_reset_graphics __P((void));
 
-
 void cmdr_term_goto __P((int,int));
 void cmdr_term_graphics __P((int));
 void cmdr_hor_line __P((int));
 void cmdr_reset_graphics __P((void));
 int cmdr_get_lines __P((void));
+void cmdr_set_lines_and_columns __P((int, int));
 
 #ifdef __cplusplus
 }
