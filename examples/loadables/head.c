@@ -88,8 +88,10 @@ file_head (fp, cnt)
 	    break;
 	}
     }
+  return (EXECUTION_SUCCESS);
 }
 
+int
 head_builtin (list)
      WORD_LIST *list;
 {
@@ -115,6 +117,7 @@ head_builtin (list)
 	      return (EX_USAGE);
 	    }
 	  break;
+	CASE_HELPOPT;
 	default:
 	  builtin_usage ();
 	  return (EX_USAGE);

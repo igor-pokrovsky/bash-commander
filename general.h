@@ -1,6 +1,6 @@
 /* general.h -- defines that everybody likes to use. */
 
-/* Copyright (C) 1993-2009 Free Software Foundation, Inc.
+/* Copyright (C) 1993-2016 Free Software Foundation, Inc.
 
    This file is part of GNU Bash, the Bourne Again SHell.
 
@@ -92,15 +92,34 @@ extern char *strcpy __P((char *, const char *));
 /* Nonzero if the integer type T is signed.  */
 #define TYPE_SIGNED(t) (! ((t) 0 < (t) -1))
 
+/* The width in bits of the integer type or expression T.
+   Padding bits are not supported; this is checked at compile-time below.  */
+#define TYPE_WIDTH(t) (sizeof (t) * CHAR_BIT)
+
+/* Bound on length of the string representing an unsigned integer
+   value representable in B bits.  log10 (2.0) < 146/485.  The
+      smallest value of B where this bound is not tight is 2621.  */
+#define INT_BITS_STRLEN_BOUND(b) (((b) * 146 + 484) / 485)
+
 /* Bound on length of the string representing an integer value of type T.
    Subtract one for the sign bit if T is signed;
    302 / 1000 is log10 (2) rounded up;
    add one for integer division truncation;
    add one more for a minus sign if t is signed.  */
 #define INT_STRLEN_BOUND(t) \
-  ((sizeof (t) * CHAR_BIT - TYPE_SIGNED (t)) * 302 / 1000 \
+  ((TYPE_WIDTH (t) - TYPE_SIGNED (t)) * 302 / 1000 \
    + 1 + TYPE_SIGNED (t))
 
+/* Updated version adapted from gnulib/intprops.h, not used right now.
+   Changes the approximation of log10(2) from 302/1000 to 146/485. */
+#if 0
+#define INT_STRLEN_BOUND(t) \
+  (INT_BITS_STRLEN_BOUND (TYPE_WIDTH (t) - TYPE_SIGNED (t)) + TYPE_SIGNED(t))
+#endif
+
+/* Bound on buffer size needed to represent an integer type or expression T,
+   including the terminating null.  */
+#define INT_BUFSIZE_BOUND(t) (INT_STRLEN_BOUND (t) + 1)
 
 /* Define exactly what a legal shell identifier consists of. */
 #define legal_variable_starter(c) (ISALPHA(c) || (c == '_'))
@@ -124,7 +143,7 @@ typedef struct {
   int token;
 } STRING_INT_ALIST;
 
-/* A macro to avoid making an unneccessary function call. */
+/* A macro to avoid making an unnecessary function call. */
 #define REVERSE_LIST(list, type) \
   ((list && list->next) ? (type)list_reverse ((GENERIC_LIST *)list) \
 			: (type)(list))
@@ -219,6 +238,9 @@ typedef int sh_ignore_func_t __P((const char *));	/* sh_icpfunc_t */
 typedef int sh_assign_func_t __P((const char *));
 typedef int sh_wassign_func_t __P((WORD_DESC *, int));
 
+typedef int sh_load_func_t __P((char *));
+typedef void sh_unload_func_t __P((char *));
+
 typedef int sh_builtin_func_t __P((WORD_LIST *)); /* sh_wlist_func_t */
 
 #endif /* SH_FUNCTION_TYPEDEF */
@@ -275,44 +297,55 @@ extern void xfree __P((void *));
 /* Declarations for functions defined in general.c */
 extern void posix_initialize __P((int));
 
+extern int num_posix_options __P((void));
+extern char *get_posix_options __P((char *));
+extern void set_posix_options __P((const char *));
+
 #if defined (RLIMTYPE)
 extern RLIMTYPE string_to_rlimtype __P((char *));
 extern void print_rlimtype __P((RLIMTYPE, int));
 #endif
 
-extern int all_digits __P((char *));
+extern int all_digits __P((const char *));
 extern int legal_number __P((const char *, intmax_t *));
-extern int legal_identifier __P((char *));
+extern int legal_identifier __P((const char *));
+extern int importable_function_name __P((const char *, size_t));
+extern int exportable_function_name __P((const char *));
 extern int check_identifier __P((WORD_DESC *, int));
-extern int legal_alias_name __P((char *, int));
+extern int valid_nameref_value __P((const char *, int));
+extern int check_selfref __P((const char *, char *, int));
+extern int legal_alias_name __P((const char *, int));
+extern int line_isblank __P((const char *));
 extern int assignment __P((const char *, int));
 
 extern int sh_unset_nodelay_mode __P((int));
+extern int sh_setclexec __P((int));
 extern int sh_validfd __P((int));
 extern int fd_ispipe __P((int));
 extern void check_dev_tty __P((void));
 extern int move_to_high_fd __P((int, int, int));
-extern int check_binary_file __P((char *, int));
+extern int check_binary_file __P((const char *, int));
 
 #ifdef _POSIXSTAT_H_
-extern int same_file __P((char *, char *, struct stat *, struct stat *));
+extern int same_file __P((const char *, const char *, struct stat *, struct stat *));
 #endif
 
 extern int sh_openpipe __P((int *));
 extern int sh_closepipe __P((int *));
 
-extern int file_exists __P((char *));
-extern int file_isdir __P((char  *));
-extern int file_iswdir __P((char  *));
+extern int file_exists __P((const char *));
+extern int file_isdir __P((const char  *));
+extern int file_iswdir __P((const char  *));
 extern int path_dot_or_dotdot __P((const char *));
 extern int absolute_pathname __P((const char *));
 extern int absolute_program __P((const char *));
 
-extern char *make_absolute __P((char *, char *));
+extern char *make_absolute __P((const char *, const char *));
 extern char *base_pathname __P((char *));
 extern char *full_pathname __P((char *));
 extern char *polite_directory_format __P((char *));
 extern char *trim_pathname __P((char *, int));
+extern char *printable_filename __P((char *, int));
 
 extern char *extract_colon_unit __P((char *, int *));
 
@@ -323,5 +356,8 @@ extern char *bash_tilde_expand __P((const char *, int));
 extern int group_member __P((gid_t));
 extern char **get_group_list __P((int *));
 extern int *get_group_array __P((int *));
+
+extern char *conf_standard_path __P((void));
+extern int default_columns __P((void));
 
 #endif	/* _GENERAL_H_ */

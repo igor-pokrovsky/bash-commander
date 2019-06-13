@@ -60,6 +60,7 @@ extern int interrupt_immediately;
 
 extern char *strerror ();
 
+int
 tee_builtin (list)
      WORD_LIST *list;
 {
@@ -83,6 +84,7 @@ tee_builtin (list)
 	case 'i':
 	  nointr = 1;
 	  break;
+	CASE_HELPOPT;
 	default:
 	  builtin_usage ();
 	  return (EX_USAGE);

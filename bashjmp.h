@@ -26,8 +26,11 @@
 extern procenv_t	top_level;
 extern procenv_t	subshell_top_level;
 extern procenv_t	return_catch;	/* used by `return' builtin */
+extern procenv_t	wait_intr_buf;
 
-#define SHFUNC_RETURN()	longjmp (return_catch, 1)
+extern int no_longjmp_on_fatal_error;
+
+#define SHFUNC_RETURN()	sh_longjmp (return_catch, 1)
 
 #define COPY_PROCENV(old, save) \
 	xbcopy ((char *)old, (char *)save, sizeof (procenv_t));

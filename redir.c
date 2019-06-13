@@ -1,6 +1,6 @@
 /* redir.c -- Functions to perform input and output redirection. */
 
-/* Copyright (C) 1997-2012 Free Software Foundation, Inc.
+/* Copyright (C) 1997-2016 Free Software Foundation, Inc.
 
    This file is part of GNU Bash, the Bourne Again SHell.
 
@@ -52,6 +52,7 @@ extern int errno;
 #include "flags.h"
 #include "execute_cmd.h"
 #include "redir.h"
+#include "trap.h"
 
 #if defined (BUFFERED_INPUT)
 #  include "input.h"
@@ -61,9 +62,6 @@ extern int errno;
 
 int expanding_redir;
 
-extern int posixly_correct;
-extern int last_command_exit_value;
-extern int executing_builtin;
 extern REDIRECT *redirection_undo_list;
 extern REDIRECT *exec_redirection_undo_list;
 
@@ -115,9 +113,9 @@ redirection_error (temp, error)
   int oflags;
 
   allocname = 0;
-  if (temp->rflags & REDIR_VARASSIGN)
+  if ((temp->rflags & REDIR_VARASSIGN) && error < 0)
     filename = allocname = savestring (temp->redirector.filename->word);
-  else if (temp->redirector.dest < 0)
+  else if ((temp->rflags & REDIR_VARASSIGN) == 0 && temp->redirector.dest < 0)
     /* This can happen when read_token_word encounters overflow, like in
        exec 4294967297>x */
     filename = _("file descriptor out of range");
@@ -156,7 +154,6 @@ redirection_error (temp, error)
 #endif
   else if (expandable_redirection_filename (temp))
     {
-expandable_filename:
       oflags = temp->redirectee.filename->flags;
       if (posixly_correct && interactive_shell == 0)
 	temp->redirectee.filename->flags |= W_NOGLOB;
@@ -324,7 +321,7 @@ write_here_string (fd, redirectee)
   /* Now that we've changed the variable search order to ignore the temp
      environment, see if we need to change the cached IFS values. */
   sv_ifs ("IFS");
-  herestr = expand_string_to_string (redirectee->word, 0);
+  herestr = expand_string_unsplit_to_string (redirectee->word, 0);
   expanding_redir = 0;
   /* Now we need to change the variable search order back to include the temp
      environment.  We force the temp environment search by forcing
@@ -410,8 +407,11 @@ write_here_document (fd, redirectee)
 	 may need to be reconsidered later. */
       if ((fd2 = dup (fd)) < 0 || (fp = fdopen (fd2, "w")) == NULL)
 	{
+	  old = errno;
 	  if (fd2 >= 0)
 	    close (fd2);
+	  dispose_words (tlist);
+	  errno = old;
 	  return (errno);
 	}
       errno = 0;
@@ -465,6 +465,9 @@ here_document_to_fd (redirectee, ri)
       return (fd);
     }
 
+  fchmod (fd, S_IRUSR | S_IWUSR);
+  SET_CLOSE_ON_EXEC (fd);
+
   errno = r = 0;		/* XXX */
   /* write_here_document returns 0 on success, errno on failure. */
   if (redirectee->word)
@@ -506,6 +509,8 @@ here_document_to_fd (redirectee, ri)
     }
 
   free (filename);
+
+  fchmod (fd2, S_IRUSR);
   return (fd2);
 }
 
@@ -576,6 +581,10 @@ redir_special_open (spec, filename, flags, mode, ri)
 #if defined (NETWORK_REDIRECTIONS)
     case RF_DEVTCP:
     case RF_DEVUDP:
+#if defined (RESTRICTED_SHELL)
+      if (restricted)
+	return (RESTRICTED_REDIRECT);
+#endif
 #if defined (HAVE_NETWORK)
       fd = netopen (filename);
 #else
@@ -671,7 +680,10 @@ redir_open (filename, flags, mode, ri)
 	  fd = open (filename, flags, mode);
 	  e = errno;
 	  if (fd < 0 && e == EINTR)
-	    QUIT;
+	    {
+	      QUIT;
+	      run_pending_traps ();
+	    }
 	  errno = e;
 	}
       while (fd < 0 && errno == EINTR);
@@ -766,6 +778,8 @@ do_redirection_internal (redirect, flags)
 	    case r_move_output_word:
 	      new_redirect = make_redirection (sd, r_move_output, rd, 0);
 	      break;
+	    default:
+	      break;	/* shut up gcc */
 	    }
 	}
       else if (ri == r_duplicating_output_word && (redirect->rflags & REDIR_VARASSIGN) == 0 && redirector == 1)
@@ -845,7 +859,7 @@ do_redirection_internal (redirect, flags)
       fd = redir_open (redirectee_word, redirect->flags, 0666, ri);
       free (redirectee_word);
 
-      if (fd == NOCLOBBER_REDIRECT)
+      if (fd == NOCLOBBER_REDIRECT || fd == RESTRICTED_REDIRECT)
 	return (fd);
 
       if (fd < 0)
@@ -902,7 +916,10 @@ do_redirection_internal (redirect, flags)
 		}
 	    }
 	  else if ((fd != redirector) && (dup2 (fd, redirector) < 0))
-	    return (errno);
+	    {
+	      close (fd);	/* dup2 failed? must be fd limit issue */
+	      return (errno);
+	    }
 
 #if defined (BUFFERED_INPUT)
 	  /* Do not change the buffered stream for an implicit redirection
@@ -1130,9 +1147,12 @@ do_redirection_internal (redirect, flags)
 
 	  r = 0;
 	  /* XXX - only if REDIR_VARASSIGN not set? */
-	  if ((flags & RX_UNDOABLE) && (fcntl (redirector, F_GETFD, 0) != -1))
+	  if (flags & RX_UNDOABLE)
 	    {
-	      r = add_undo_redirect (redirector, ri, -1);
+	      if (fcntl (redirector, F_GETFD, 0) != -1)
+		r = add_undo_redirect (redirector, ri, -1);
+	      else
+		r = add_undo_close_redirect (redirector);
 	      REDIRECTION_ERROR (r, errno, redirector);
 	    }
 
@@ -1157,6 +1177,8 @@ do_redirection_internal (redirect, flags)
 
     case r_duplicating_input_word:
     case r_duplicating_output_word:
+    case r_move_input_word:
+    case r_move_output_word:
       break;
     }
   return (0);
@@ -1316,6 +1338,10 @@ stdin_redirection (ri, redirector)
     case r_append_err_and_out:
     case r_output_force:
     case r_duplicating_output_word:
+    case r_move_input:
+    case r_move_output:
+    case r_move_input_word:
+    case r_move_output_word:
       return (0);
     }
   return (0);
@@ -1370,11 +1396,30 @@ redir_varvalue (redir)
   w = redir->redirector.filename->word;		/* shorthand */
   /* XXX - handle set -u here? */
 #if defined (ARRAY_VARS)
-  if (vr = valid_array_reference (w))
-    v = array_variable_part (w, &sub, &len);
+  if (vr = valid_array_reference (w, 0))
+    {
+      v = array_variable_part (w, 0, &sub, &len);
+    }
   else
 #endif
-  v = find_variable (w);
+    {
+      v = find_variable (w);
+#if defined (ARRAY_VARS)
+      if (v == 0)
+	{
+	  v = find_variable_last_nameref (w, 0);
+	  if (v && nameref_p (v))
+	    {
+	      w = nameref_cell (v);
+	      if (vr = valid_array_reference (w, 0))
+		v = array_variable_part (w, 0, &sub, &len);
+	      else
+	        v = find_variable (w);
+	    }
+	}
+#endif
+    }
+	
   if (v == 0 || invisible_p (v))
     return -1;
 

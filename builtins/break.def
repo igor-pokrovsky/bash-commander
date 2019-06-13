@@ -43,10 +43,8 @@ $END
 #include "../bashintl.h"
 
 #include "../shell.h"
+#include "../execute_cmd.h"
 #include "common.h"
-
-extern char *this_command_name;
-extern int posixly_correct;
 
 static int check_loop_level __P((void));
 
@@ -66,6 +64,8 @@ break_builtin (list)
      WORD_LIST *list;
 {
   intmax_t newbreak;
+
+  CHECK_HELPOPT (list);
 
   if (check_loop_level () == 0)
     return (EXECUTION_SUCCESS);
@@ -106,6 +106,8 @@ continue_builtin (list)
      WORD_LIST *list;
 {
   intmax_t newcont;
+
+  CHECK_HELPOPT (list);
 
   if (check_loop_level () == 0)
     return (EXECUTION_SUCCESS);

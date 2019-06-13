@@ -1,6 +1,6 @@
 /* subst.h -- Names of externally visible functions in subst.c. */
 
-/* Copyright (C) 1993-2010 Free Software Foundation, Inc.
+/* Copyright (C) 1993-2017 Free Software Foundation, Inc.
 
    This file is part of GNU Bash, the Bourne Again SHell.
 
@@ -32,14 +32,16 @@
    expanding a pattern ${var%#[#%]pattern} in an expansion surrounded
    by double quotes. Q_DOLBRACE means we are expanding a ${...} word, so
    backslashes should also escape { and } and be removed. */
-#define Q_DOUBLE_QUOTES  0x01
-#define Q_HERE_DOCUMENT  0x02
-#define Q_KEEP_BACKSLASH 0x04
-#define Q_PATQUOTE	 0x08
-#define Q_QUOTED	 0x10
-#define Q_ADDEDQUOTES	 0x20
-#define Q_QUOTEDNULL	 0x40
-#define Q_DOLBRACE	 0x80
+#define Q_DOUBLE_QUOTES  0x001
+#define Q_HERE_DOCUMENT  0x002
+#define Q_KEEP_BACKSLASH 0x004
+#define Q_PATQUOTE	 0x008
+#define Q_QUOTED	 0x010
+#define Q_ADDEDQUOTES	 0x020
+#define Q_QUOTEDNULL	 0x040
+#define Q_DOLBRACE	 0x080
+#define Q_ARITH		 0x100	/* expanding string for arithmetic evaluation */
+#define Q_ARRAYSUB	 0x200	/* expanding indexed array subscript */
 
 /* Flag values controlling how assignment statements are treated. */
 #define ASS_APPEND	0x0001
@@ -47,7 +49,11 @@
 #define ASS_MKASSOC	0x0004
 #define ASS_MKGLOBAL	0x0008	/* force global assignment */
 #define ASS_NAMEREF	0x0010	/* assigning to nameref variable */
-#define ASS_FROMREF	0x0020	/* assigning from value of nameref variable */
+#define ASS_FORCE	0x0020	/* force assignment even to readonly variable */
+#define ASS_CHKLOCAL	0x0040	/* check local variable before assignment */
+#define ASS_NOEXPAND	0x0080	/* don't expand associative array subscripts */
+#define ASS_NOEVAL	0x0100	/* don't evaluate value as expression */
+#define ASS_NOLONGJMP	0x0200	/* don't longjmp on fatal assignment error */
 
 /* Flags for the string extraction functions. */
 #define SX_NOALLOC	0x0001	/* just skip; don't return substring */
@@ -60,6 +66,8 @@
 #define SX_ARITHSUB	0x0080	/* extracting $(( ... )) (currently unused) */
 #define SX_POSIXEXP	0x0100	/* extracting new Posix pattern removal expansions in extract_dollar_brace_string */
 #define SX_WORD		0x0200	/* extracting word in ${param op word} */
+#define SX_COMPLETE	0x0400	/* extracting word for completion */
+#define SX_STRIPDQ	0x0800	/* strip double quotes when extracting double-quoted string */
 
 /* Remove backslashes which are quoting backquotes from STRING.  Modifies
    STRING, and returns a pointer to it. */
@@ -98,10 +106,10 @@ extern char *string_list_internal __P((WORD_LIST *, char *));
 extern char *string_list __P((WORD_LIST *));
 
 /* Turn $* into a single string, obeying POSIX rules. */
-extern char *string_list_dollar_star __P((WORD_LIST *));
+extern char *string_list_dollar_star __P((WORD_LIST *, int, int));
 
 /* Expand $@ into a single string, obeying POSIX rules. */
-extern char *string_list_dollar_at __P((WORD_LIST *, int));
+extern char *string_list_dollar_at __P((WORD_LIST *, int, int));
 
 /* Turn the positional paramters into a string, understanding quoting and
    the various subtleties of using the first character of $IFS as the
@@ -134,7 +142,7 @@ extern int do_word_assignment __P((WORD_DESC *, int));
    of space allocated to TARGET.  SOURCE can be NULL, in which
    case nothing happens.  Gets rid of SOURCE by free ()ing it.
    Returns TARGET in case the location has changed. */
-extern char *sub_append_string __P((char *, char *, int *, int *));
+extern char *sub_append_string __P((char *, char *, int *, size_t *));
 
 /* Append the textual representation of NUMBER to TARGET.
    INDEX and SIZE are as in SUB_APPEND_STRING. */
@@ -184,7 +192,9 @@ extern char *expand_arith_string __P((char *, int));
 extern char *dequote_string __P((char *));
 
 /* De-quote CTLESC-escaped CTLESC or CTLNUL characters in STRING. */
-extern char *dequote_escapes __P((char *));
+extern char *dequote_escapes __P((const char *));
+
+extern WORD_DESC *dequote_word __P((WORD_DESC *));
 
 /* De-quote quoted characters in each word in LIST. */
 extern WORD_LIST *dequote_list __P((WORD_LIST *));
@@ -208,7 +218,7 @@ extern char *quote_string __P((char *));
 
 /* Quote escape characters (characters special to interals of expansion)
    in a string. */
-extern char *quote_escapes __P((char *));
+extern char *quote_escapes __P((const char *));
 
 /* And remove such quoted special characters. */
 extern char *remove_quoted_escapes __P((char *));
@@ -254,9 +264,10 @@ extern WORD_LIST *expand_words_no_vars __P((WORD_LIST *));
    command substitution, arithmetic expansion, and word splitting. */
 extern WORD_LIST *expand_words_shellexp __P((WORD_LIST *));
 
-extern WORD_DESC *command_substitute __P((char *, int));
+extern WORD_DESC *command_substitute __P((char *, int, int));
 extern char *pat_subst __P((char *, char *, char *, int));
 
+#if defined (PROCESS_SUBSTITUTION)
 extern int fifos_pending __P((void));
 extern int num_fifos __P((void));
 extern void unlink_fifo_list __P((void));
@@ -265,6 +276,15 @@ extern void unlink_fifo __P((int));
 extern char *copy_fifo_list __P((int *));
 extern void unlink_new_fifos __P((char *, int));
 extern void close_new_fifos __P((char *, int));
+
+extern void clear_fifo_list __P((void));
+
+extern int find_procsub_child __P((pid_t));
+extern void set_procsub_status __P((int, pid_t, int));
+
+extern void wait_procsubs __P((void));
+extern void reap_procsubs __P((void));
+#endif
 
 extern WORD_LIST *list_string_with_quotes __P((char *));
 
@@ -278,15 +298,23 @@ extern char *cond_expand_word __P((WORD_DESC *, int));
 #endif
 
 /* Flags for skip_to_delim */
-#define SD_NOJMP	0x01	/* don't longjmp on fatal error. */
-#define SD_INVERT	0x02	/* look for chars NOT in passed set */
-#define SD_NOQUOTEDELIM	0x04	/* don't let single or double quotes act as delimiters */
-#define SD_NOSKIPCMD	0x08	/* don't skip over $(, <(, or >( command/process substitution */
-#define SD_EXTGLOB	0x10	/* skip over extended globbing patterns if appropriate */
-#define SD_IGNOREQUOTE	0x20	/* single and double quotes are not special */
-#define SD_GLOB		0x40	/* skip over glob patterns like bracket expressions */
+#define SD_NOJMP	0x001	/* don't longjmp on fatal error. */
+#define SD_INVERT	0x002	/* look for chars NOT in passed set */
+#define SD_NOQUOTEDELIM	0x004	/* don't let single or double quotes act as delimiters */
+#define SD_NOSKIPCMD	0x008	/* don't skip over $(, <(, or >( command/process substitution; parse them as commands */
+#define SD_EXTGLOB	0x010	/* skip over extended globbing patterns if appropriate */
+#define SD_IGNOREQUOTE	0x020	/* single and double quotes are not special */
+#define SD_GLOB		0x040	/* skip over glob patterns like bracket expressions */
+#define SD_NOPROCSUB	0x080	/* don't parse process substitutions as commands */
+#define SD_COMPLETE	0x100	/* skip_to_delim during completion */
+#define SD_HISTEXP	0x200	/* skip_to_delim during history expansion */
+#define SD_ARITHEXP	0x400	/* skip_to_delim during arithmetic expansion */
 
 extern int skip_to_delim __P((char *, int, char *, int));
+
+#if defined (BANG_HISTORY)
+extern int skip_to_histexp __P((char *, int, char *, int));
+#endif
 
 #if defined (READLINE)
 extern int char_is_quoted __P((char *, int));
@@ -298,6 +326,7 @@ extern WORD_LIST *split_at_delims __P((char *, int, char *, int, int, int *, int
 extern SHELL_VAR *ifs_var;
 extern char *ifs_value;
 extern unsigned char ifs_cmap[];
+extern int ifs_is_set, ifs_is_null;
 
 #if defined (HANDLE_MULTIBYTE)
 extern unsigned char ifs_firstc[];
@@ -305,6 +334,12 @@ extern size_t ifs_firstc_len;
 #else
 extern unsigned char ifs_firstc;
 #endif
+
+extern int assigning_in_environment;
+extern int expanding_redir;
+extern int inherit_errexit;
+
+extern pid_t last_command_subst_pid;
 
 /* Evaluates to 1 if C is a character in $IFS. */
 #define isifs(c)	(ifs_cmap[(unsigned char)(c)] != 0)
@@ -314,5 +349,7 @@ extern unsigned char ifs_firstc;
 
 /* Is the first character of STRING a quoted NULL character? */
 #define QUOTED_NULL(string) ((string)[0] == CTLNUL && (string)[1] == '\0')
+
+extern void invalidate_cached_quoted_dollar_at __P((void));
 
 #endif /* !_SUBST_H_ */

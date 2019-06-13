@@ -30,6 +30,7 @@
 
 extern char *ttyname ();
 
+int
 tty_builtin (list)
      WORD_LIST *list;
 {
@@ -45,6 +46,7 @@ tty_builtin (list)
 	case 's':
 	  sflag = 1;
 	  break;
+	CASE_HELPOPT;
 	default:
 	  builtin_usage ();
 	  return (EX_USAGE);

@@ -27,7 +27,9 @@
 #include "stdc.h"
 
 /* Functions from expr.c. */
-extern intmax_t evalexp __P((char *, int *));
+#define EXP_EXPANDED	0x01
+
+extern intmax_t evalexp __P((char *, int, int *));
 
 /* Functions from print_cmd.c. */
 #define FUNC_MULTILINE	0x01
@@ -92,6 +94,7 @@ extern void get_current_user_info __P((void));
 
 /* Functions from eval.c. */
 extern int reader_loop __P((void));
+extern int pretty_print_loop __P((void));
 extern int parse_command __P((void));
 extern int read_command __P((void));
 
@@ -103,8 +106,10 @@ extern char **brace_expand __P((char *));
 /* Miscellaneous functions from parse.y */
 extern int yyparse __P((void));
 extern int return_EOF __P((void));
+extern void push_token __P((int));
 extern char *xparse_dolparen __P((char *, char *, int *, int));
 extern void reset_parser __P((void));
+extern void reset_readahead_token __P((void));
 extern WORD_LIST *parse_string_to_word_list __P((char *, int, const char *));
 
 extern int parser_in_command_position __P((void));
@@ -114,6 +119,8 @@ extern void free_pushed_string_input __P((void));
 extern int parser_expanding_alias __P((void));
 extern void parser_save_alias __P((void));
 extern void parser_restore_alias __P((void));
+
+extern void clear_shell_input_line __P((void));
 
 extern char *decode_prompt_string __P((char *));
 
@@ -134,6 +141,9 @@ extern char *get_locale_var __P((char *));
 extern char *localetrans __P((char *, int, int *));
 extern char *mk_msgstr __P((char *, int *));
 extern char *localeexpand __P((char *, int, int, int, int *));
+#ifndef locale_decpoint
+extern int locale_decpoint __P((void));
+#endif
 
 /* Declarations for functions defined in list.c. */
 extern void list_walk __P((GENERIC_LIST *, sh_glist_func_t *));
@@ -150,7 +160,7 @@ extern int find_index_in_alist __P((char *, STRING_INT_ALIST *, int));
 
 extern char *substring __P((const char *, int, int));
 extern char *strsub __P((char *, char *, char *, int));
-extern char *strcreplace __P((char *, int, char *, int));
+extern char *strcreplace __P((char *, int, const char *, int));
 extern void strip_leading __P((char *));
 extern void strip_trailing __P((char *, int, int));
 extern void xbcopy __P((char *, char *, int));
@@ -302,7 +312,7 @@ extern int sh_setlinebuf __P((FILE *));
 #endif
 
 /* declarations for functions defined in lib/sh/shaccess.c */
-extern int sh_eaccess __P((char *, int));
+extern int sh_eaccess __P((const char *, int));
 
 /* declarations for functions defined in lib/sh/shmatch.c */
 extern int sh_regmatch __P((const char *, const char *, int));
@@ -323,8 +333,9 @@ extern char *sh_mkdoublequoted __P((const char *, int, int));
 extern char *sh_un_double_quote __P((char *));
 extern char *sh_backslash_quote __P((char *, const char *, int));
 extern char *sh_backslash_quote_for_double_quotes __P((char *));
-extern int sh_contains_shell_metas __P((char *));
-extern int sh_contains_quotes __P((char *));
+extern char *sh_quote_reusable __P((char *, int));
+extern int sh_contains_shell_metas __P((const char *));
+extern int sh_contains_quotes __P((const char *));
 
 /* declarations for functions defined in lib/sh/spell.c */
 extern int spname __P((char *, char *));
@@ -332,7 +343,7 @@ extern char *dirspell __P((char *));
 
 /* declarations for functions defined in lib/sh/strcasecmp.c */
 #if !defined (HAVE_STRCASECMP)
-extern int strncasecmp __P((const char *, const char *, int));
+extern int strncasecmp __P((const char *, const char *, size_t));
 extern int strcasecmp __P((const char *, const char *));
 #endif /* HAVE_STRCASECMP */
 
@@ -475,6 +486,14 @@ extern unsigned int fsleep __P((unsigned int, unsigned int));
 extern int u32cconv __P((unsigned long, char *));
 extern void u32reset __P((void));
 
+/* declarations for functions defined in lib/sh/utf8.c */
+extern char *utf8_mbschr __P((const char *, int));
+extern int utf8_mbscmp __P((const char *, const char *));
+extern char *utf8_mbsmbchar __P((const char *));
+extern int utf8_mbsnlen __P((const char *, size_t, int));
+extern int utf8_mblen __P((const char *, size_t));
+extern size_t utf8_mbstrlen __P((const char *));
+
 /* declarations for functions defined in lib/sh/wcsnwidth.c */
 #if defined (HANDLE_MULTIBYTE)
 extern int wcsnwidth __P((const wchar_t *, size_t, int));
@@ -487,7 +506,7 @@ extern void get_new_window_size __P((int, int *, int *));
 extern int zcatfd __P((int, int, char *));
 
 /* declarations for functions defined in lib/sh/zgetline.c */
-extern ssize_t zgetline __P((int, char **, size_t *, int));
+extern ssize_t zgetline __P((int, char **, size_t *, int, int));
 
 /* declarations for functions defined in lib/sh/zmapfd.c */
 extern int zmapfd __P((int, char **, char *));
@@ -506,11 +525,11 @@ extern void zsyncfd __P((int));
 extern int zwrite __P((int, char *, size_t));
 
 /* declarations for functions defined in lib/glob/gmisc.c */
-extern int match_pattern_char __P((char *, char *));
+extern int match_pattern_char __P((char *, char *, int));
 extern int umatchlen __P((char *, size_t));
 
 #if defined (HANDLE_MULTIBYTE)
-extern int match_pattern_wchar __P((wchar_t *, wchar_t *));
+extern int match_pattern_wchar __P((wchar_t *, wchar_t *, int));
 extern int wmatchlen __P((wchar_t *, size_t));
 #endif
 

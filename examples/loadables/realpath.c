@@ -60,6 +60,7 @@ extern int	errno;
 
 extern char	*sh_realpath();
 
+int
 realpath_builtin(list)
 WORD_LIST	*list;
 {
@@ -85,15 +86,19 @@ WORD_LIST	*list;
 		case 'v':
 			vflag = 1;
 			break;
+		CASE_HELPOPT;
 		default:
 			builtin_usage();
+			return (EX_USAGE);
 		}
 	}
 
 	list = loptend;
 
-	if (list == 0)
+	if (list == 0) {
 		builtin_usage();
+		return (EX_USAGE);
+	}
 
 	for (es = EXECUTION_SUCCESS; list; list = list->next) {
 		p = list->word->word;

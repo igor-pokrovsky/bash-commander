@@ -101,7 +101,7 @@ extern int errno;
 static procenv_t test_exit_buf;
 static int test_error_return;
 #define test_exit(val) \
-	do { test_error_return = val; longjmp (test_exit_buf, 1); } while (0)
+	do { test_error_return = val; sh_longjmp (test_exit_buf, 1); } while (0)
 
 extern int sh_stat __P((const char *, struct stat *));
 
@@ -225,6 +225,7 @@ and ()
  *	'-'('G'|'L'|'O'|'S'|'N') filename
  * 	'-t' [int]
  *	'-'('z'|'n') string
+ *	'-'('v'|'R') varname
  *	'-o' option
  *	string
  *	string ('!='|'='|'==') string
@@ -273,7 +274,7 @@ term ()
     value = binary_operator ();
 
   /* Might be a switch type argument */
-  else if (argv[pos][0] == '-' && argv[pos][2] == '\0')
+  else if (argv[pos][0] == '-' && argv[pos][1] &&  argv[pos][2] == '\0')
     {
       if (test_unop (argv[pos]))
 	value = unary_operator ();
@@ -343,10 +344,10 @@ arithcomp (s, t, op, flags)
 
   if (flags & TEST_ARITHEXP)
     {
-      l = evalexp (s, &expok);
+      l = evalexp (s, 0, &expok);
       if (expok == 0)
 	return (FALSE);		/* should probably longjmp here */
-      r = evalexp (t, &expok);
+      r = evalexp (t, 0, &expok);
       if (expok == 0)
 	return (FALSE);		/* ditto */
     }
@@ -621,15 +622,19 @@ unary_test (op, arg)
       return (minus_o_option_value (arg) == 1);
 
     case 'v':
-      v = find_variable (arg);
 #if defined (ARRAY_VARS)
-      if (v == 0 && valid_array_reference (arg))
+      if (valid_array_reference (arg, 0))
 	{
 	  char *t;
-	  t = array_value (arg, 0, 0, (int *)0, (arrayind_t *)0);
-	  return (t ? TRUE : FALSE);
+	  int rtype, ret;
+	  t = array_value (arg, 0, 0, &rtype, (arrayind_t *)0);
+	  ret = t ? TRUE : FALSE;
+	  if (rtype > 0)	/* subscript is * or @ */
+	    free (t);
+	  return ret;
 	}
-     else if (v && invisible_p (v) == 0 && array_p (v))
+      v = find_variable (arg);
+      if (v && invisible_p (v) == 0 && array_p (v))
 	{
 	  char *t;
 	  /* [[ -v foo ]] == [[ -v foo[0] ]] */
@@ -642,6 +647,8 @@ unary_test (op, arg)
 	  t = assoc_reference (assoc_cell (v), "0");
 	  return (t ? TRUE : FALSE);
 	}
+#else
+      v = find_variable (arg);
 #endif
       return (v && invisible_p (v) == 0 && var_isset (v) ? TRUE : FALSE);
 
@@ -669,7 +676,7 @@ test_binop (op)
   else if (op[2] == '\0' && op[1] == '~' && (op[0] == '=' || op[0] == '!'))
     return (1);
 #endif
-  else if (op[0] != '-' || op[2] == '\0' || op[3] != '\0')
+  else if (op[0] != '-' || op[1] == '\0' || op[2] == '\0' || op[3] != '\0')
     return (0);
   else
     {
@@ -713,7 +720,7 @@ int
 test_unop (op)
      char *op;
 {
-  if (op[0] != '-' || op[2] != 0)
+  if (op[0] != '-' || (op[1] && op[2] != 0))
     return (0);
 
   switch (op[1])
@@ -735,7 +742,7 @@ two_arguments ()
 {
   if (argv[pos][0] == '!' && argv[pos][1] == '\0')
     return (argv[pos + 1][0] == '\0');
-  else if (argv[pos][0] == '-' && argv[pos][2] == '\0')
+  else if (argv[pos][0] == '-' && argv[pos][1] && argv[pos][2] == '\0')
     {
       if (test_unop (argv[pos]))
 	return (unary_operator ());
@@ -748,7 +755,7 @@ two_arguments ()
   return (0);
 }
 
-#define ANDOR(s)  (s[0] == '-' && !s[2] && (s[1] == 'a' || s[1] == 'o'))
+#define ANDOR(s)  (s[0] == '-' && (s[1] == 'a' || s[1] == 'o') && s[2] == 0)
 
 /* This could be augmented to handle `-t' as equivalent to `-t 1', but
    POSIX requires that `-t' be given an argument. */
@@ -820,6 +827,13 @@ posixtest ()
 	  {
 	    advance (1);
 	    value = !three_arguments ();
+	    break;
+	  }
+	else if (argv[pos][0] == '(' && argv[pos][1] == '\0' && argv[argc-1][0] == ')' && argv[argc-1][1] == '\0')
+	  {
+	    advance (1);
+	    value = two_arguments ();
+	    pos = argc;
 	    break;
 	  }
 	/* FALLTHROUGH */

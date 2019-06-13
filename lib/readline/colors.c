@@ -2,8 +2,8 @@
 
    Modified by Chet Ramey for Readline.
 
-   Copyright (C) 1985, 1988, 1990-1991, 1995-2010, 2012 Free Software Foundation,
-   Inc.
+   Copyright (C) 1985, 1988, 1990-1991, 1995-2010, 2012, 2015, 2017
+   Free Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -37,6 +37,10 @@
 #include "posixstat.h" // stat related macros (S_ISREG, ...)
 #include <fcntl.h> // S_ISUID
 
+#ifndef S_ISDIR
+#  define	S_ISDIR(m)	(((m) & S_IFMT) == S_IFDIR)
+#endif
+
 // strlen()
 #if defined (HAVE_STRING_H)
 #  include <string.h>
@@ -66,7 +70,8 @@ COLOR_EXT_TYPE *_rl_color_ext_list = 0;
 
 /* Output a color indicator (which may contain nulls).  */
 void
-_rl_put_indicator (const struct bin_str *ind) {
+_rl_put_indicator (const struct bin_str *ind)
+{
   fwrite (ind->string, ind->len, 1, rl_outstream);
 }
 
@@ -98,9 +103,29 @@ _rl_set_normal_color (void)
     }
 }
 
+bool
+_rl_print_prefix_color (void)
+{
+  struct bin_str *s;
+
+  /* What do we want to use for the prefix? Let's try cyan first, see colors.h */
+  s = &_rl_color_indicator[C_PREFIX];
+  if (s->string != NULL)
+    {
+      if (is_colored (C_NORM))
+	restore_default_color ();
+      _rl_put_indicator (&_rl_color_indicator[C_LEFT]);
+      _rl_put_indicator (s);
+      _rl_put_indicator (&_rl_color_indicator[C_RIGHT]);
+      return 0;
+    }
+  else
+    return 1;
+}
+  
 /* Returns whether any color sequence was printed. */
 bool
-_rl_print_color_indicator (char *f)
+_rl_print_color_indicator (const char *f)
 {
   enum indicator_no colored_filetype;
   COLOR_EXT_TYPE *ext;	/* Color extension */
@@ -108,10 +133,9 @@ _rl_print_color_indicator (char *f)
 
   const char* name;
   char *filename;
-  struct stat astat;
+  struct stat astat, linkstat;
   mode_t mode;
-  int linkok;
-
+  int linkok;	/* 1 == ok, 0 == dangling symlink, -1 == missing */
   int stat_ok;
 
   name = f;
@@ -130,10 +154,20 @@ _rl_print_color_indicator (char *f)
 #else
   stat_ok = stat(name, &astat);
 #endif
-  if( stat_ok == 0 ) {
-    mode = astat.st_mode;
-    linkok = 1; //f->linkok;
-  }
+  if (stat_ok == 0)
+    {
+      mode = astat.st_mode;
+#if defined (HAVE_LSTAT)
+      if (S_ISLNK (mode))
+	{
+	  linkok = stat (name, &linkstat) == 0;
+	  if (linkok && strncmp (_rl_color_indicator[C_LINK].string, "target", 6) == 0)
+	    mode = linkstat.st_mode;
+	}
+      else
+#endif
+	linkok = 1;
+    }
   else
     linkok = -1;
 
@@ -141,6 +175,8 @@ _rl_print_color_indicator (char *f)
 
   if (linkok == -1 && _rl_color_indicator[C_MISSING].string != NULL)
     colored_filetype = C_MISSING;
+  else if (linkok == 0 && S_ISLNK(mode) && _rl_color_indicator[C_ORPHAN].string != NULL)
+    colored_filetype = C_ORPHAN;	/* dangling symlink */
   else if(stat_ok != 0)
     {
       static enum indicator_no filetype_indicator[] = FILETYPE_INDICATORS;
@@ -152,11 +188,17 @@ _rl_print_color_indicator (char *f)
         {
           colored_filetype = C_FILE;
 
+#if defined (S_ISUID)
           if ((mode & S_ISUID) != 0 && is_colored (C_SETUID))
             colored_filetype = C_SETUID;
-          else if ((mode & S_ISGID) != 0 && is_colored (C_SETGID))
+          else
+#endif
+#if defined (S_ISGID)
+          if ((mode & S_ISGID) != 0 && is_colored (C_SETGID))
             colored_filetype = C_SETGID;
-          else if (is_colored (C_CAP) && 0) //f->has_capability)
+          else
+#endif
+          if (is_colored (C_CAP) && 0) //f->has_capability)
             colored_filetype = C_CAP;
           else if ((mode & S_IXUGO) != 0 && is_colored (C_EXEC))
             colored_filetype = C_EXEC;
@@ -180,15 +222,16 @@ _rl_print_color_indicator (char *f)
             colored_filetype = C_STICKY;
 #endif
         }
+#if defined (S_ISLNK)
       else if (S_ISLNK (mode))
-        colored_filetype = ((linkok == 0
-                 && (!strncmp (_rl_color_indicator[C_LINK].string, "target", 6)
-                     || _rl_color_indicator[C_ORPHAN].string))
-                ? C_ORPHAN : C_LINK);
+        colored_filetype = C_LINK;
+#endif
       else if (S_ISFIFO (mode))
         colored_filetype = C_FIFO;
+#if defined (S_ISSOCK)
       else if (S_ISSOCK (mode))
         colored_filetype = C_SOCK;
+#endif
       else if (S_ISBLK (mode))
         colored_filetype = C_BLK;
       else if (S_ISCHR (mode))

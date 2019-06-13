@@ -1,6 +1,6 @@
 /* braces.c -- code for doing word expansion in curly braces. */
 
-/* Copyright (C) 1987-2012 Free Software Foundation, Inc.
+/* Copyright (C) 1987-2018 Free Software Foundation, Inc.
 
    This file is part of GNU Bash, the Bourne Again SHell.
 
@@ -38,6 +38,12 @@
 
 #if defined (SHELL)
 #  include "shell.h"
+#else
+#  if defined (TEST)
+typedef char *WORD_DESC;
+typedef char **WORD_LIST;
+#define _(X)	X
+#  endif /* TEST */
 #endif /* SHELL */
 
 #include "typemax.h"		/* INTMAX_MIN, INTMAX_MAX */
@@ -55,7 +61,9 @@ extern int errno;
 
 extern int asprintf __P((char **, const char *, ...)) __attribute__((__format__ (printf, 2, 3)));
 
+#if defined (NOTDEF)
 extern int last_command_exit_value;
+#endif
 
 /* Basic idea:
 
@@ -287,7 +295,9 @@ expand_amble (text, tlen, flags)
   char *tem;
   int start, i, c;
 
+#if defined (SHELL)
   DECLARE_MBSTATE;
+#endif
 
   result = (char **)NULL;
 
@@ -301,7 +311,7 @@ expand_amble (text, tlen, flags)
 #else
       tem = (char *)xmalloc (1 + (i - start));
       strncpy (tem, &text[start], (i - start));
-      tem[i- start] = '\0';
+      tem[i - start] = '\0';
 #endif
 
       partial = brace_expand (tem);
@@ -319,6 +329,8 @@ expand_amble (text, tlen, flags)
 	  if (tresult == 0)
 	    {
 	      internal_error (_("brace expansion: cannot allocate memory for %s"), tem);
+	      free (tem);
+	      strvec_dispose (partial);
 	      strvec_dispose (result);
 	      result = (char **)NULL;
 	      return result;
@@ -333,7 +345,11 @@ expand_amble (text, tlen, flags)
 	  free (partial);
 	}
       free (tem);
+#if defined (SHELL)
       ADVANCE_CHAR (text, tlen, i);
+#else
+      i++;
+#endif
       start = i;
     }
   return (result);
@@ -369,7 +385,7 @@ mkseq (start, end, incr, type, width)
      int type, width;
 {
   intmax_t n, prevn;
-  int i, j, nelem;
+  int i, nelem;
   char **result, *t;
 
   if (incr == 0)
@@ -404,13 +420,13 @@ mkseq (start, end, incr, type, width)
   /* Instead of a simple nelem = prevn + 1, something like:
   	nelem = (prevn / imaxabs(incr)) + 1;
      would work */
-  nelem = (prevn / sh_imaxabs(incr)) + 1;
-  if (nelem > INT_MAX - 2)		/* Don't overflow int */
+  if ((prevn / sh_imaxabs (incr)) > INT_MAX - 3)	/* check int overflow */
     return ((char **)NULL);
+  nelem = (prevn / sh_imaxabs(incr)) + 1;
   result = strvec_mcreate (nelem + 1);
   if (result == 0)
     {
-      internal_error (_("brace expansion: failed to allocate memory for %d elements"), nelem);
+      internal_error (_("brace expansion: failed to allocate memory for %u elements"), (unsigned int)nelem);
       return ((char **)NULL);
     }
 
@@ -420,7 +436,13 @@ mkseq (start, end, incr, type, width)
   do
     {
 #if defined (SHELL)
-      QUIT;		/* XXX - memory leak here */
+      if (ISINTERRUPT)
+        {
+          result[i] = (char *)NULL;
+          strvec_dispose (result);
+          result = (char **)NULL;
+        }
+      QUIT;
 #endif
       if (type == ST_INT)
 	result[i++] = t = itos (n);
@@ -475,7 +497,7 @@ expand_seqterm (text, tlen)
      size_t tlen;
 {
   char *t, *lhs, *rhs;
-  int i, lhs_t, rhs_t, lhs_l, rhs_l, width;
+  int lhs_t, rhs_t, lhs_l, rhs_l, width;
   intmax_t lhs_v, rhs_v, incr;
   intmax_t tl, tr;
   char **result, *ep, *oep;
@@ -618,7 +640,11 @@ brace_gobbler (text, tlen, indx, satisfy)
       if (pass_next)
 	{
 	  pass_next = 0;
+#if defined (SHELL)
 	  ADVANCE_CHAR (text, tlen, i);
+#else
+	  i++;
+#endif
 	  continue;
 	}
 
@@ -652,7 +678,11 @@ brace_gobbler (text, tlen, indx, satisfy)
 	  if (quoted == '"' && c == '$' && text[i+1] == '(')	/*)*/
 	    goto comsub;
 #endif
+#if defined (SHELL)
 	  ADVANCE_CHAR (text, tlen, i);
+#else
+	  i++;
+#endif
 	  continue;
 	}
 
@@ -705,25 +735,15 @@ comsub:
 	commas++;
 #endif
 
+#if defined (SHELL)
       ADVANCE_CHAR (text, tlen, i);
+#else
+      i++;
+#endif
     }
 
   *indx = i;
   return (c);
-}
-
-/* Return 1 if ARR has any non-empty-string members.  Used to short-circuit
-   in array_concat() below. */
-static int
-degenerate_array (arr)
-     char **arr;
-{
-  register int i;
-
-  for (i = 0; arr[i]; i++)
-    if (arr[i][0] != '\0')
-      return 0;
-  return 1;
 }
 
 /* Return a new array of strings which is the result of appending each
@@ -759,7 +779,9 @@ array_concat (arr1, arr2)
   len1 = strvec_len (arr1);
   len2 = strvec_len (arr2);
 
-  result = (char **)xmalloc ((1 + (len1 * len2)) * sizeof (char *));
+  result = (char **)malloc ((1 + (len1 * len2)) * sizeof (char *));
+  if (result == 0)
+    return (result);
 
   len = 0;
   for (i = 0; i < len1; i++)
@@ -784,20 +806,29 @@ array_concat (arr1, arr2)
 #if defined (TEST)
 #include <stdio.h>
 
-fatal_error (format, arg1, arg2)
-     char *format, *arg1, *arg2;
+void *
+xmalloc(n)
+     size_t n;
 {
-  report_error (format, arg1, arg2);
-  exit (1);
+  return (malloc (n));
 }
 
-report_error (format, arg1, arg2)
+void *
+xrealloc(p, n)
+     void *p;
+     size_t n;
+{
+  return (realloc (p, n));
+}
+
+int
+internal_error (format, arg1, arg2)
      char *format, *arg1, *arg2;
 {
   fprintf (stderr, format, arg1, arg2);
   fprintf (stderr, "\n");
 }
-
+      
 main ()
 {
   char example[256];
@@ -821,7 +852,7 @@ main ()
       for (i = 0; result[i]; i++)
 	printf ("%s\n", result[i]);
 
-      free_array (result);
+      strvec_dispose (result);
     }
 }
 

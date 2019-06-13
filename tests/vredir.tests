@@ -22,9 +22,9 @@ exec {v}>&-
 readonly v=42
 bar
 
-echo foo 1 >&$v
-echo foo 2 >&$v
-echo foo 3 >&$v
+echo foo 1 2>&1 >&$v | { grep -q '\$v: Bad' || echo 'bad foo 1'; }
+echo foo 2 2>&1 >&$v | { grep -q '\$v: Bad' || echo 'bad foo 2'; }
+echo foo 3 2>&1 >&$v | { grep -q '\$v: Bad' || echo 'bad foo 3'; }
 
 cat $TMPFILE
 rm -f $TMPFILE
@@ -42,5 +42,7 @@ ${THIS_SH} ./vredir4.sub
 ${THIS_SH} ./vredir5.sub
 
 ${THIS_SH} ./vredir6.sub
+
+${THIS_SH} ./vredir7.sub
 
 exit 0

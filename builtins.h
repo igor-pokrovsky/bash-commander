@@ -18,6 +18,9 @@
    along with Bash.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#ifndef BUILTINS_H
+#define BUILTINS_H
+
 #include "config.h"
 
 #if defined (HAVE_UNISTD_H)
@@ -41,6 +44,7 @@
 #define SPECIAL_BUILTIN 0x08	/* This is a Posix `special' builtin. */
 #define ASSIGNMENT_BUILTIN 0x10	/* This builtin takes assignment statements. */
 #define POSIX_BUILTIN	0x20	/* This builtins is special in the Posix command search order. */
+#define LOCALVAR_BUILTIN   0x40	/* This builtin creates local variables */
 
 #define BASE_INDENT	4
 
@@ -59,3 +63,5 @@ extern int num_shell_builtins;	/* Number of shell builtins. */
 extern struct builtin static_shell_builtins[];
 extern struct builtin *shell_builtins;
 extern struct builtin *current_builtin;
+
+#endif /* BUILTINS_H */

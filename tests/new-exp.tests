@@ -1,3 +1,7 @@
+if (( $UID == 0 )); then
+	echo "new-exp.tests: the test suite should not be run as root" >&2
+fi
+
 # must do this because posix mode causes process substitution to be disabled
 # and flagged as a syntax error, which causes the shell to exit
 set +o posix
@@ -167,6 +171,14 @@ recho ${a-$z}
 expect nothing
 recho ${!1-$z}
 
+set -- a 'b c' d
+unset foo
+foo=@
+expect '<a> <b> <c> <d>'
+recho ${!foo}
+expect '<a> <b c> <d>'
+recho "${!foo}"
+
 set -u
 expect $0: ABX: unbound variable
 ( recho ${ABX} )
@@ -332,7 +344,7 @@ recho "${foo:-$@}"
 expect '<ab> <cd> <ef> <gh>'
 recho "${foo:-"$@"}"
 
-shift $#
+shift ${#}
 expect nothing
 recho $xxx"$@"
 expect nothing
@@ -444,6 +456,19 @@ recho ${xxx//%${zzz}}
 recho ${xxx//#${zzz}/}
 recho ${xxx//#${zzz}}
 
+# make sure null strings are replaced appropriately
+unset var
+var=
+echo "${var/#/x}"
+echo "${var/*/x}"
+echo "${var//*/x}"
+
+var=abc
+echo "${var/#/x}"
+echo "${var/*/x}"
+echo "${var//*/x}"
+unset var
+
 # another case that caused a core dump in bash-2.0
 XPATH=/usr/bin:/bin:/usr/local/bin:/usr/gnu/bin::/usr/bin/X11:/sbin:/usr/sbin
 
@@ -477,7 +502,7 @@ recho ${*%?}
 recho ${@#?}
 recho ${*#?}
 
-shift $#
+shift ${#}
 set -u
 ( recho $9 ; echo after 1)
 ( recho ${9} ; echo after 2)
@@ -572,6 +597,12 @@ ${THIS_SH} ./new-exp8.sub
 # tests to check whether things like indirect expansion of a variable whose
 # value is 'anothervar[@]' stop working
 ${THIS_SH} ./new-exp9.sub
+
+# new parameter transformation `@' expansion operator
+${THIS_SH} ./new-exp10.sub
+
+# parameter substring replacement and removal operators with multibyte chars
+${THIS_SH} ./new-exp11.sub
 
 # problems with stray CTLNUL in bash-4.0-alpha
 unset a

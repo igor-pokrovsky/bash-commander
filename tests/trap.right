@@ -18,15 +18,15 @@ trap -- 'echo [$LINENO] debug' DEBUG
 [24] debug
 func[16] funcdebug
 funcdebug line
-[26] debug
+./trap.tests[26] funcdebug
 trap -- 'echo exiting' EXIT
 trap -- 'echo aborting' SIGHUP
 trap -- 'echo aborting' SIGINT
 trap -- 'echo aborting' SIGQUIT
 trap -- 'echo aborting' SIGABRT
 trap -- 'echo aborting' SIGTERM
-trap -- 'echo [$LINENO] debug' DEBUG
-[28] debug
+trap -- 'echo ${FUNCNAME:-$0}[$LINENO] funcdebug' DEBUG
+./trap.tests[28] funcdebug
 ./trap.tests[33] debug
 ./trap.tests[34] debug
 func2[30] debug
@@ -64,6 +64,14 @@ after while
 before false in trap2a.sub
 after false in trap2a.sub
 command substitution
+ERRTRAP
+ERRTRAP
+bar
+ERRTRAP
+ERRTRAP
+ERRTRAP
+ERRTRAP
+ERRTRAP
 +[6] echo 1
 1
 +[7] echo 2
@@ -93,6 +101,10 @@ sleep 2
 wait $!
 exit
 in trap EXIT
+fn
+after 1
+fn
+after 2
 caught a child death
 caught a child death
 caught a child death
@@ -100,5 +112,4 @@ trap -- 'echo caught a child death' SIGCHLD
 trap -- 'echo exiting' EXIT
 trap -- 'echo aborting' SIGABRT
 trap -- 'echo caught a child death' SIGCHLD
-trap -- '' SIGUSR2
 exiting

@@ -44,6 +44,7 @@ extern int errno;
 #include "bashintl.h"
 
 #include "shell.h"
+#include "execute_cmd.h"
 #include "flags.h"
 #include "input.h"
 
@@ -53,8 +54,6 @@ extern int errno;
 
 extern int executing_line_number __P((void));
 
-extern int last_command_exit_value;
-extern char *shell_name;
 #if defined (JOB_CONTROL)
 extern pid_t shell_pgrp;
 extern int give_terminal_to __P((pid_t, int));
@@ -263,6 +262,29 @@ internal_warning (format, va_alist)
 
   error_prolog (1);
   fprintf (stderr, _("warning: "));
+
+  SH_VA_START (args, format);
+
+  vfprintf (stderr, format, args);
+  fprintf (stderr, "\n");
+
+  va_end (args);
+}
+
+void
+#if defined (PREFER_STDARG)
+internal_inform (const char *format, ...)
+#else
+internal_inform (format, va_alist)
+     const char *format;
+     va_dcl
+#endif
+{
+  va_list args;
+
+  error_prolog (1);
+  /* TRANSLATORS: this is a prefix for informational messages. */
+  fprintf (stderr, _("INFORM: "));
 
   SH_VA_START (args, format);
 

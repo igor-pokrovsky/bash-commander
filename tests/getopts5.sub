@@ -1,9 +1,8 @@
-#!/local/bin/bash
 #Time-stamp: <95/06/07 07:40:40 hrue@imf.unit.no>
 
 getop () {
 
-    local OPTIND
+    local OPTIND=1
     local OPTERR=1
 
     echo getop: OPTERR=$OPTERR    

@@ -39,6 +39,7 @@
 #include "shell.h"
 #include "builtins.h"
 #include "common.h"
+#include "getopt.h"
 
 #ifndef errno
 extern int	errno;
@@ -46,8 +47,10 @@ extern int	errno;
 
 extern char	**make_builtin_argv ();
 
+static void	perms();
 static int	printst();
 static int	printsome();
+static void	printmode();
 static int	printfinfo();
 static int	finfo_main();
 
@@ -192,7 +195,7 @@ int	m;
 	return (m & (S_IRWXU|S_IRWXG|S_IRWXO|S_ISUID|S_ISGID));
 }
 
-static int
+static void
 perms(m)
 int	m;
 {
@@ -236,7 +239,7 @@ int	m;
 	printf ("u=%s,g=%s,o=%s", ubits, gbits, obits);
 }
 
-static int
+static void
 printmode(mode)
 int	mode;
 {
@@ -262,7 +265,7 @@ int	mode;
 	printf("\n");
 }
 
-static int	
+static int
 printst(st)
 struct stat *st;
 {
@@ -333,9 +336,9 @@ int	flags;
 	} else if (flags & OPT_DEV)
 		printf("%d\n", st->st_dev);
 	else if (flags & OPT_INO)
-		printf("%d\n", st->st_ino);
+		printf("%lu\n", (unsigned long)st->st_ino);
 	else if (flags & OPT_FID)
-		printf("%d:%ld\n", st->st_dev, st->st_ino);
+		printf("%d:%lu\n", st->st_dev, (unsigned long)st->st_ino);
 	else if (flags & OPT_NLINK)
 		printf("%d\n", st->st_nlink);
 	else if (flags & OPT_LNKNAM) {
@@ -459,7 +462,7 @@ char	**argv;
 void
 builtin_usage()
 {
-	fprintf(stderr, "%s: usage: %s [-%s] [file ...]\n", prog, OPTIONS);
+	fprintf(stderr, "%s: usage: %s [-%s] [file ...]\n", prog, prog, OPTIONS);
 }
 
 #ifndef HAVE_STRERROR

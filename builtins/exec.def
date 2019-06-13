@@ -1,7 +1,7 @@
 This file is exec.def, from which is created exec.c.
 It implements the builtin "exec" in Bash.
 
-Copyright (C) 1987-2012 Free Software Foundation, Inc.
+Copyright (C) 1987-2015 Free Software Foundation, Inc.
 
 This file is part of GNU Bash, the Bourne Again SHell.
 
@@ -31,8 +31,8 @@ any redirections take effect in the current shell.
 
 Options:
   -a name	pass NAME as the zeroth argument to COMMAND
-  -c		execute COMMAND with an empty environment
-  -l		place a dash in the zeroth argument to COMMAND
+  -c	execute COMMAND with an empty environment
+  -l	place a dash in the zeroth argument to COMMAND
 
 If the command cannot be executed, a non-interactive shell exits, unless
 the shell option `execfail' is set.
@@ -68,13 +68,13 @@ $END
 #endif
 #include "common.h"
 #include "bashgetopt.h"
+#include "input.h"
 
 /* Not all systems declare ERRNO in errno.h... and some systems #define it! */
 #if !defined (errno)
 extern int errno;
 #endif /* !errno */
 
-extern int subshell_environment;
 extern REDIRECT *redirection_undo_list;
 extern char *exec_argv0;
 
@@ -119,6 +119,7 @@ exec_builtin (list)
 	case 'a':
 	  argv0 = list_optarg;
 	  break;
+	CASE_HELPOPT;
 	default:
 	  builtin_usage ();
 	  return (EX_USAGE);
@@ -142,6 +143,7 @@ exec_builtin (list)
 #endif /* RESTRICTED_SHELL */
 
   args = strvec_from_word_list (list, 1, 0, (int *)NULL);
+  env = (char **)0;
 
   /* A command with a slash anywhere in its name is not looked up in $PATH. */
   command = absolute_program (args[0]) ? args[0] : search_for_command (args[0], 1);
@@ -188,12 +190,18 @@ exec_builtin (list)
 
   /* Decrement SHLVL by 1 so a new shell started here has the same value,
      preserving the appearance.  After we do that, we need to change the
-     exported environment to include the new value. */
-  if (cleanenv == 0)
+     exported environment to include the new value.  If we've already forked
+     and are in a subshell, we don't want to decrement the shell level,
+     since we are `increasing' the level */
+
+  if (cleanenv == 0 && (subshell_environment & SUBSHELL_PAREN) == 0)
     adjust_shell_level (-1);
 
   if (cleanenv)
-    env = (char **)NULL;
+    {
+      env = strvec_create (1);
+      env[0] = (char *)0;
+    }
   else
     {	
       maybe_make_export_env ();
@@ -210,7 +218,14 @@ exec_builtin (list)
 #if defined (JOB_CONTROL)
   if (subshell_environment == 0)
     end_job_control ();
+  if (interactive || job_control)
+    default_tty_job_signals ();		/* undo initialize_job_signals */
 #endif /* JOB_CONTROL */
+
+#if defined (BUFFERED_INPUT)
+  if (default_buffered_input >= 0)
+    sync_buffered_stream (default_buffered_input);
+#endif
 
   exit_value = shell_execve (command, args, env);
 
@@ -239,6 +254,9 @@ failed_exec:
 
   if (args)
     strvec_dispose (args);
+
+  if (env && env != export_env)
+    strvec_dispose (env);
 
   initialize_traps ();
   initialize_signals (1);

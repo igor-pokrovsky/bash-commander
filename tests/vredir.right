@@ -11,9 +11,6 @@ bar ()
 ./vredir.tests: line 6: v: readonly variable
 ./vredir.tests: line 6: v: cannot assign fd to variable
 42
-./vredir.tests: line 25: $v: Bad file descriptor
-./vredir.tests: line 26: $v: Bad file descriptor
-./vredir.tests: line 27: $v: Bad file descriptor
 bar is a function
 bar () 
 { 
@@ -27,7 +24,7 @@ line 3
 bar is a function
 bar () 
 { 
-    exec  {v}<<EOF
+    exec {v}<<EOF
 line 1
 line 2
 line 3
@@ -88,5 +85,16 @@ swizzle ()
 }
 ok 1
 ./vredir6.sub: redirection error: cannot duplicate fd: Invalid argument
-./vredir6.sub: line 13: v: Invalid argument
+./vredir6.sub: line 13: /dev/null: Invalid argument
 unset
+12 10
+a
+a
+swizzle is a function
+swizzle () 
+{ 
+    exec {fd[0]}<&0;
+    exec {fd[1]}>&1;
+    exec {stdin}<&${fd[0]}-;
+    exec {stdout}>&${fd[1]}-
+}

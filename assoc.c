@@ -277,7 +277,10 @@ int starsub, quoted;
   for (i = 1; l && i < start; i++)
     l = l->next;
   if (l == 0)
-    return ((char *)NULL);
+    {
+      dispose_words (save);
+      return ((char *)NULL);
+    }
   for (j = 0,h = t = l; l && j < nelem; j++)
     {
       t = l;
@@ -302,54 +305,29 @@ assoc_patsub (h, pat, rep, mflags)
      char *pat, *rep;
      int mflags;
 {
-  BUCKET_CONTENTS *tlist;
-  int i, slen;
-  HASH_TABLE *h2;
-  char	*t, *sifs, *ifs;
+  char	*t;
+  int pchar, qflags;
+  WORD_LIST *wl, *save;
 
   if (h == 0 || assoc_empty (h))
     return ((char *)NULL);
 
-  h2 = assoc_copy (h);
-  for (i = 0; i < h2->nbuckets; i++)
-    for (tlist = hash_items (i, h2); tlist; tlist = tlist->next)
-      {
-	t = pat_subst ((char *)tlist->data, pat, rep, mflags);
-	FREE (tlist->data);
-	tlist->data = t;
-      }
+  wl = assoc_to_word_list (h);
+  if (wl == 0)
+    return (char *)NULL;
 
-  if (mflags & MATCH_QUOTED)
-    assoc_quote (h2);
-  else
-    assoc_quote_escapes (h2);
-
-  if (mflags & MATCH_STARSUB)
+  for (save = wl; wl; wl = wl->next)
     {
-      assoc_remove_quoted_nulls (h2);
-      sifs = ifs_firstchar ((int *)NULL);
-      t = assoc_to_string (h2, sifs, 0);
-      free (sifs);
+      t = pat_subst (wl->word->word, pat, rep, mflags);
+      FREE (wl->word->word);
+      wl->word->word = t;
     }
-  else if (mflags & MATCH_QUOTED)
-    {
-      /* ${array[@]} */
-      sifs = ifs_firstchar (&slen);
-      ifs = getifs ();
-      if (ifs == 0 || *ifs == 0)
-	{
-	  if (slen < 2)
-	    sifs = xrealloc (sifs, 2);
-	  sifs[0] = ' ';
-	  sifs[1] = '\0';
-	}
-      t = assoc_to_string (h2, sifs, 0);
-      free(sifs);
-    }
-  else
-    t = assoc_to_string (h2, " ", 0);
 
-  assoc_dispose (h2);
+  pchar = (mflags & MATCH_STARSUB) == MATCH_STARSUB ? '*' : '@';
+  qflags = (mflags & MATCH_QUOTED) == MATCH_QUOTED ? Q_DOUBLE_QUOTES : 0;
+
+  t = string_list_pos_params (pchar, save, qflags);
+  dispose_words (save);
 
   return t;
 }
@@ -361,54 +339,29 @@ assoc_modcase (h, pat, modop, mflags)
      int modop;
      int mflags;
 {
-  BUCKET_CONTENTS *tlist;
-  int i, slen;
-  HASH_TABLE *h2;
-  char	*t, *sifs, *ifs;
+  char	*t;
+  int pchar, qflags;
+  WORD_LIST *wl, *save;
 
   if (h == 0 || assoc_empty (h))
     return ((char *)NULL);
 
-  h2 = assoc_copy (h);
-  for (i = 0; i < h2->nbuckets; i++)
-    for (tlist = hash_items (i, h2); tlist; tlist = tlist->next)
-      {
-	t = sh_modcase ((char *)tlist->data, pat, modop);
-	FREE (tlist->data);
-	tlist->data = t;
-      }
+  wl = assoc_to_word_list (h);
+  if (wl == 0)
+    return ((char *)NULL);
 
-  if (mflags & MATCH_QUOTED)
-    assoc_quote (h2);
-  else
-    assoc_quote_escapes (h2);
-
-  if (mflags & MATCH_STARSUB)
+  for (save = wl; wl; wl = wl->next)
     {
-      assoc_remove_quoted_nulls (h2);
-      sifs = ifs_firstchar ((int *)NULL);
-      t = assoc_to_string (h2, sifs, 0);
-      free (sifs);
+      t = sh_modcase (wl->word->word, pat, modop);
+      FREE (wl->word->word);
+      wl->word->word = t;
     }
-  else if (mflags & MATCH_QUOTED)
-    {
-      /* ${array[@]} */
-      sifs = ifs_firstchar (&slen);
-      ifs = getifs ();
-      if (ifs == 0 || *ifs == 0)
-	{
-	  if (slen < 2)
-	    sifs = xrealloc (sifs, 2);
-	  sifs[0] = ' ';
-	  sifs[1] = '\0';
-	}
-      t = assoc_to_string (h2, sifs, 0);
-      free(sifs);
-    }
-  else
-    t = assoc_to_string (h2, " ", 0);
 
-  assoc_dispose (h2);
+  pchar = (mflags & MATCH_STARSUB) == MATCH_STARSUB ? '*' : '@';
+  qflags = (mflags & MATCH_QUOTED) == MATCH_QUOTED ? Q_DOUBLE_QUOTES : 0;
+
+  t = string_list_pos_params (pchar, save, qflags);
+  dispose_words (save);
 
   return t;
 }
@@ -433,17 +386,19 @@ assoc_to_assign (hash, quoted)
   for (i = 0; i < hash->nbuckets; i++)
     for (tlist = hash_items (i, hash); tlist; tlist = tlist->next)
       {
-#if 1
-	if (sh_contains_shell_metas (tlist->key))
+	if (ansic_shouldquote (tlist->key))
+	  istr = ansic_quote (tlist->key, 0, (int *)0);
+	else if (sh_contains_shell_metas (tlist->key))
 	  istr = sh_double_quote (tlist->key);
 	else if (ALL_ELEMENT_SUB (tlist->key[0]) && tlist->key[1] == '\0')
 	  istr = sh_double_quote (tlist->key);	
 	else
 	  istr = tlist->key;	
-#else
-	istr = tlist->key;
-#endif
-	vstr = tlist->data ? sh_double_quote ((char *)tlist->data) : (char *)0;
+
+	vstr = tlist->data ? (ansic_shouldquote ((char *)tlist->data) ?
+				ansic_quote ((char *)tlist->data, 0, (int *)0) :
+				sh_double_quote ((char *)tlist->data))
+			   : (char *)0;
 
 	elen = STRLEN (istr) + 8 + STRLEN (vstr);
 	RESIZE_MALLOCED_BUFFER (ret, rlen, (elen+1), rsize, rsize);
