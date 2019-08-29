@@ -2841,7 +2841,7 @@ case $host_os in *\ *) host_os=`echo "$host_os" | sed 's/ /-/g'`;; esac
 
 opt_bash_malloc=yes
 opt_afs=no
-opt_curses=no
+opt_curses=yes
 opt_with_installed_readline=no
 
 #htmldir=
@@ -5499,7 +5499,7 @@ if test $opt_history = yes || test $opt_bang_history = yes; then
 		$as_echo "#define BANG_HISTORY 1" >>confdefs.h
 
 	fi
- 	if test "$opt_with_installed_readline" != "no"; then
+	if test "$opt_with_installed_readline" != "no"; then
 		HIST_LIBDIR=$RL_LIBDIR
 		HISTORY_DEP=
 		HISTORY_LIB=-lhistory
@@ -17884,4 +17884,3 @@ if test -n "$ac_unrecognized_opts" && test "$enable_option_checking" != no; then
   { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: unrecognized options: $ac_unrecognized_opts" >&5
 $as_echo "$as_me: WARNING: unrecognized options: $ac_unrecognized_opts" >&2;}
 fi
-
